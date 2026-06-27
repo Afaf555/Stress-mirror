@@ -6,40 +6,64 @@ import { useState, useEffect, useRef } from "react";
  * Извор на референтните вредности: WHO/HBSC International Report 2021/22.
  */
 
-// --- HBSC симптом-чеклист (8 ставки) ---
-const SYMPTOMS = [
-  { id: "head", label: "Главоболка" },
-  { id: "stomach", label: "Болки во стомак" },
-  { id: "back", label: "Болки во грб" },
-  { id: "low", label: "Потиштеност" },
-  { id: "irritable", label: "Раздразливост или лошо расположение" },
-  { id: "nervous", label: "Нервоза" },
-  { id: "sleep", label: "Тешкотии со заспивање" },
-  { id: "dizzy", label: "Вртоглавица" },
+const QUESTIONS = [
+  { id: "anxiety",     label: "Се чувствуваш вознемирен/а или загрижен/а",                 scale: "intensity" },
+  { id: "rumination",  label: "Тешко ти е да ги исклучиш мислите и да се смириш",           scale: "intensity" },
+  { id: "sadness",     label: "Се чувствуваш тажно или без надеж",                          scale: "intensity" },
+  { id: "focus",       label: "Тешко ти е да се концентрираш",                              scale: "intensity" },
+  { id: "overwhelm",   label: "Се чувствуваш преоптоварен/а со обврски",                    scale: "intensity" },
+  { id: "body",        label: "Стресот го чувствуваш во телото (глава, стомак, напнатост)", scale: "intensity" },
+  { id: "sleep",       label: "Колку добро спиеш во последно време",                        scale: "sleep"     },
+  { id: "support",     label: "Се чувствуваш поддржано од луѓето околу тебе",               scale: "support"   },
+  { id: "lookforward", label: "Имаш нешто на кое со нетрпение чекаш",                       scale: "support"   },
 ];
 
-const SCALE = [
-  { score: 4, label: "Речиси секој ден" },
-  { score: 3, label: "Повеќе од еднаш неделно" },
-  { score: 2, label: "Околу еднаш неделно" },
-  { score: 1, label: "Околу еднаш месечно" },
-  { score: 0, label: "Ретко или никогаш" },
-];
-
-const FREQUENT_THRESHOLD = 3;
-
-const HBSC_REFERENCE = {
-  male: { 11: 26, 13: 31, 15: 36 },
-  female: { 11: 39, 13: 50, 15: 61 },
-  other: { 11: 33, 13: 40, 15: 48 },
+const SCALES = {
+  intensity: [
+    { score: 4, label: "Да" },
+    { score: 3, label: "Често" },
+    { score: 2, label: "Понекогаш" },
+    { score: 1, label: "Ретко" },
+    { score: 0, label: "Не" },
+  ],
+  sleep: [
+    { score: 4, label: "Многу лошо" },
+    { score: 3, label: "Лошо" },
+    { score: 2, label: "Средно" },
+    { score: 1, label: "Добро" },
+    { score: 0, label: "Одлично" },
+  ],
+  support: [
+    { score: 3, label: "Не" },
+    { score: 2, label: "Не баш" },
+    { score: 1, label: "Понекогаш" },
+    { score: 0, label: "Да" },
+  ],
 };
 
-const AGES = [11, 13, 15];
-const GENDERS = [
-  { id: "female", label: "Девојче" },
-  { id: "male", label: "Момче" },
-  { id: "other", label: "Друго / не сакам да кажам" },
+// Max score: 6×4 (intensity) + 1×4 (sleep) + 2×3 (support) = 34
+const MAX_SCORE = 34;
+
+const AGE_GROUPS = [
+  { id: "u16",   label: "под 16" },
+  { id: "16-25", label: "16–25"  },
+  { id: "26-40", label: "26–40"  },
+  { id: "40+",   label: "40+"    },
 ];
+
+const TEEN_AGES = [11, 13, 15];
+
+const GENDERS = [
+  { id: "female", label: "Девојче / Жена"           },
+  { id: "male",   label: "Момче / Маж"              },
+  { id: "other",  label: "Друго / не сакам да кажам" },
+];
+
+const HBSC_REFERENCE = {
+  male:   { 11: 26, 13: 31, 15: 36 },
+  female: { 11: 39, 13: 50, 15: 61 },
+  other:  { 11: 33, 13: 40, 15: 48 },
+};
 
 const BANDS = {
   calm: {
@@ -47,49 +71,73 @@ const BANDS = {
     title: "Се чувствуваш прилично добро",
     color: "#2FB6A3",
     aura: ["#7be6d3", "#9be8c9"],
-    body: "Сега покажуваш малку чести симптоми на стрес. Тоа е добар знак - секојдневните навики што ти помагаат вреди да ги одржуваш.",
+    body: "Во моментов покажуваш малку знаци на стрес или анксиозност. Тоа е добар знак — навиките што те смируваат вреди да ги одржуваш.",
   },
   some: {
     key: "some",
     title: "Имаш некои знаци на стрес",
     color: "#7B6CF6",
     aura: ["#a99bff", "#c3b8ff"],
-    body: "Неколку симптоми ти се појавуваат почесто. Тоа е вообичаено во твоите години и не значи дека нешто не е во ред - но вреди да обрнеш внимание на што ти помага да се смириш.",
+    body: "Чувствуваш одреден притисок — емоционален или ментален. Тоа е сосема вообичаено и не значи дека нешто не е во ред. Но вреди да застанеш и да провериш што ти треба.",
   },
   high: {
     key: "high",
     title: "Носиш доста стрес во моментов",
     color: "#FF8A6B",
     aura: ["#ff9e7d", "#ffc1a3"],
-    body: "Повеќе симптоми ти се појавуваат речиси секојдневно. Не мораш да го носиш тоа сам/а - разговор со личност на која ѝ веруваш навистина помага.",
+    body: "Многу работи те притискаат сега. Не мораш да го носиш тоа сам/а — разговор со личност на која и веруваш навистина помага. Малите чекори исто така бројат.",
   },
 };
 
-function bandFor(frequentCount) {
-  if (frequentCount <= 1) return BANDS.calm;
-  if (frequentCount <= 3) return BANDS.some;
+function bandFor(stressScore) {
+  if (stressScore <= 8)  return BANDS.calm;
+  if (stressScore <= 18) return BANDS.some;
   return BANDS.high;
 }
 
 const TIPS = {
   calm: [
-    "Задржи ги навиките што те смируваат - сон, движење, време со луѓе што ти годат.",
+    "Задржи ги навиките што те смируваат — сон, движење, квалитетно време.",
     "Забележувај што те полни со енергија и враќај се на тоа во полоши денови.",
-    "Биди тука и за врсник - поддршката функционира во двете насоки.",
+    "Биди тука и за некој близок — поддршката функционира во двете насоки.",
   ],
   some: [
-    "Проба со 4-7-8 дишење: вдиши 4с, задржи 7с, издиши 8с - повтори 4 пати.",
+    "Проба со 4-7-8 дишење (копчето долу-десно) — 4 рунди за помалку од 2 минути.",
+    "Запиши во дневникот што те мачи — ставањето мисли на хартија ја намалува тежината.",
     "Намали екрани барем еден час пред спиење за полесно заспивање.",
-    "Запиши што те мачи во дневникот - ставањето мисли на хартија ја намалува тежината.",
     "Кажи му на некој на кого му веруваш како се чувствуваш.",
   ],
   high: [
-    "Разговарај со родител, наставник, училишен психолог или доктор - тоа не е слабост, туку грижа за себе.",
+    "Разговарај со родител, наставник, психолог или доктор — тоа не е слабост, туку грижа за себе.",
+    "Проба со вежбата за дишење сега (копчето долу-десно) — помага да се смириш за момент.",
     "Раздели го денот на мали чекори; не мора сè одеднаш.",
-    "Краток излез, движење или прошетка ја спушта напнатоста во телото.",
-    "Чувај го сонот - заспивање и будење во слично време секој ден.",
+    "Краток излез или прошетка ја спушта напнатоста во телото.",
+    "Чувај го сонот — заспивање во слично време секој ден навистина помага.",
   ],
 };
+
+const MOOD_OPTIONS = [
+  { value: 0, emoji: "😔", label: "Тажно" },
+  { value: 1, emoji: "😟", label: "Вознемирено" },
+  { value: 2, emoji: "😐", label: "Неутрално" },
+  { value: 3, emoji: "🙂", label: "Добро" },
+  { value: 4, emoji: "😊", label: "Одлично" },
+];
+
+const ENERGY_OPTIONS = [
+  { value: 0, label: "Исцрпено" },
+  { value: 1, label: "Уморно" },
+  { value: 2, label: "Средно" },
+  { value: 3, label: "Добро" },
+  { value: 4, label: "Полно" },
+];
+
+const BREATHE_PHASES = [
+  { label: "Вдиши",  duration: 4000, scale: 1.6, count: "up"   },
+  { label: "Задржи", duration: 7000, scale: 1.6, count: "down" },
+  { label: "Издиши", duration: 8000, scale: 1.0, count: "down" },
+];
+const BREATHE_ROUNDS = 4;
 
 // --- локално чување податоци ---
 const CHECKS_KEY = "ogledalo:checks:v1";
@@ -122,18 +170,24 @@ function fmtDateTime(d) {
   return `${fmtDate(d)} · ${p(x.getHours())}:${p(x.getMinutes())}`;
 }
 
-function computeResult(answers, age, gender) {
-  const total = SYMPTOMS.reduce((s, x) => s + (answers[x.id] ?? 0), 0);
-  const frequent = SYMPTOMS.filter((x) => (answers[x.id] ?? 0) >= FREQUENT_THRESHOLD);
-  const band = bandFor(frequent.length);
-  const peerPct = age && gender ? HBSC_REFERENCE[gender][age] : null;
-  return { total, frequentCount: frequent.length, band, peerPct };
+function computeResult(answers, ageGroup, gender, exactAge) {
+  const stressScore = QUESTIONS.reduce((s, q) => s + (answers[q.id] ?? 0), 0);
+  const band = bandFor(stressScore);
+  const pct = Math.round((stressScore / MAX_SCORE) * 100);
+  let peerPct = null;
+  if (ageGroup === "u16" && gender && exactAge) {
+    peerPct = HBSC_REFERENCE[gender]?.[exactAge] ?? null;
+  }
+  return { stressScore, pct, band, peerPct };
 }
 
 export default function App() {
-  const [stage, setStage] = useState("intro"); // intro | quiz | result | history
-  const [age, setAge] = useState(null);
+  const [stage, setStage] = useState("intro"); // intro | quiz | mood | result | history
+  const [ageGroup, setAgeGroup] = useState(null);
+  const [exactAge, setExactAge] = useState(null);
   const [gender, setGender] = useState(null);
+  const [mood, setMood] = useState(null);
+  const [energy, setEnergy] = useState(null);
   const [answers, setAnswers] = useState({});
   const [step, setStep] = useState(0);
 
@@ -141,6 +195,8 @@ export default function App() {
   const [journal, setJournal] = useState(() => loadJSON(JOURNAL_KEY, []));
   const [lastResult, setLastResult] = useState(null);
   const [prevCheck, setPrevCheck] = useState(null);
+  const [showBreathe, setShowBreathe] = useState(false);
+  const [showJournal, setShowJournal] = useState(false);
 
   const topRef = useRef(null);
 
@@ -163,16 +219,17 @@ export default function App() {
   }
 
   function finishQuiz() {
-    const result = computeResult(answers, age, gender);
+    const result = computeResult(answers, ageGroup, gender, exactAge);
     const previous = checks.length ? checks[checks.length - 1] : null;
     const entry = {
       id: Date.now(),
       date: new Date().toISOString(),
-      frequentCount: result.frequentCount,
-      total: result.total,
+      stressScore: result.stressScore,
       bandKey: result.band.key,
-      age,
+      ageGroup,
       gender,
+      mood,
+      energy,
     };
     persistChecks([...checks, entry]);
     setPrevCheck(previous);
@@ -200,8 +257,11 @@ export default function App() {
   function startNew() {
     setAnswers({});
     setStep(0);
-    setAge(null);
+    setAgeGroup(null);
+    setExactAge(null);
     setGender(null);
+    setMood(null);
+    setEnergy(null);
     setStage("intro");
   }
 
@@ -225,9 +285,11 @@ export default function App() {
 
         {stage === "intro" && (
           <Intro
-            age={age}
+            ageGroup={ageGroup}
+            exactAge={exactAge}
             gender={gender}
-            setAge={setAge}
+            setAgeGroup={setAgeGroup}
+            setExactAge={setExactAge}
             setGender={setGender}
             onStart={() => setStage("quiz")}
             historyCount={checks.length}
@@ -242,8 +304,18 @@ export default function App() {
             setStep={setStep}
             answers={answers}
             setAnswers={setAnswers}
-            allAnswered={SYMPTOMS.every((s) => answers[s.id] !== undefined)}
-            onFinish={finishQuiz}
+            onFinish={() => setStage("mood")}
+          />
+        )}
+
+        {stage === "mood" && (
+          <MoodEnergyPicker
+            mood={mood}
+            setMood={setMood}
+            energy={energy}
+            setEnergy={setEnergy}
+            onDone={finishQuiz}
+            onSkip={() => { setMood(null); setEnergy(null); finishQuiz(); }}
           />
         )}
 
@@ -251,7 +323,8 @@ export default function App() {
           <Result
             result={lastResult}
             prevCheck={prevCheck}
-            age={age}
+            ageGroup={ageGroup}
+            exactAge={exactAge}
             gender={gender}
             onAddJournal={addJournal}
             onReset={startNew}
@@ -276,21 +349,38 @@ export default function App() {
           му веруваш, со училишен психолог или доктор може да помогне.
         </footer>
       </main>
+      <FloatingButtons
+        onBreathe={() => setShowBreathe(true)}
+        onJournal={() => setShowJournal(true)}
+      />
+      {showBreathe && (
+        <BreatheOverlay
+          onClose={() => setShowBreathe(false)}
+          reduceMotion={reduceMotion}
+        />
+      )}
+      {showJournal && (
+        <JournalOverlay
+          journal={journal}
+          onAddJournal={addJournal}
+          onDeleteJournal={deleteJournal}
+          onClose={() => setShowJournal(false)}
+        />
+      )}
     </div>
   );
 }
 
-function Intro({ age, gender, setAge, setGender, onStart, historyCount, journalCount, onHistory }) {
-  const ready = age && gender;
+function Intro({ ageGroup, exactAge, gender, setAgeGroup, setExactAge, setGender, onStart, historyCount, journalCount, onHistory }) {
+  const ready = ageGroup && gender;
   return (
     <section className="og-card og-intro">
       <h1 className="og-title">
         Како ти е <em>навистина</em> овие денови?
       </h1>
       <p className="og-lead">
-        Осум кратки прашања за тоа како се чувствувало твоето тело и расположение во последно време.
-        На крај ќе видиш како стоиш во споредба со твои врсници од истражувањето HBSC - и како се
-        менуваш од ден на ден.
+        Девет кратки прашања за тоа како се чувствуваш ментално и емоционално во последно
+        време. На крај ќе добиеш порака, споредба со врсници (ако си под 16) и совети прилагодени на тебе.
       </p>
       <p className="og-privacy">Се чува само на твојот уред. Ништо не се испраќа.</p>
 
@@ -307,13 +397,26 @@ function Intro({ age, gender, setAge, setGender, onStart, historyCount, journalC
       <div className="og-field">
         <span className="og-flabel">Колку години имаш?</span>
         <div className="og-chips">
-          {AGES.map((a) => (
-            <button key={a} className={`og-chip ${age === a ? "on" : ""}`} onClick={() => setAge(a)}>
-              {a}{a === 15 ? "+" : ""}
+          {AGE_GROUPS.map((a) => (
+            <button key={a.id} className={`og-chip ${ageGroup === a.id ? "on" : ""}`} onClick={() => { setAgeGroup(a.id); setExactAge(null); }}>
+              {a.label}
             </button>
           ))}
         </div>
       </div>
+
+      {ageGroup === "u16" && (
+        <div className="og-field">
+          <span className="og-flabel">Поточно (за споредба со врсници):</span>
+          <div className="og-chips">
+            {TEEN_AGES.map((a) => (
+              <button key={a} className={`og-chip ${exactAge === a ? "on" : ""}`} onClick={() => setExactAge(a)}>
+                {a}{a === 15 ? "+" : ""}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="og-field">
         <span className="og-flabel">Се идентификуваш како...</span>
@@ -337,32 +440,38 @@ function Intro({ age, gender, setAge, setGender, onStart, historyCount, journalC
   );
 }
 
-function Quiz({ step, setStep, answers, setAnswers, allAnswered, onFinish }) {
-  const sym = SYMPTOMS[step];
-  const current = answers[sym.id];
-  const isLast = step === SYMPTOMS.length - 1;
+function Quiz({ step, setStep, answers, setAnswers, onFinish }) {
+  const q = QUESTIONS[step];
+  const scale = SCALES[q.scale];
+  const current = answers[q.id];
+  const isLast = step === QUESTIONS.length - 1;
+  const allAnswered = QUESTIONS.every((x) => answers[x.id] !== undefined);
+  const timerRef = useRef(null);
+
+  useEffect(() => () => clearTimeout(timerRef.current), []);
 
   function pick(score) {
-    setAnswers((prev) => ({ ...prev, [sym.id]: score }));
-    setTimeout(() => {
-      if (!isLast) setStep(step + 1);
-    }, 220);
+    setAnswers((prev) => ({ ...prev, [q.id]: score }));
+    if (!isLast) {
+      clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setStep(step + 1), 220);
+    }
   }
 
   return (
     <section className="og-card og-quiz">
       <div className="og-progress">
         <div className="og-track">
-          <div className="og-fill" style={{ width: `${((step + 1) / SYMPTOMS.length) * 100}%` }} />
+          <div className="og-fill" style={{ width: `${((step + 1) / QUESTIONS.length) * 100}%` }} />
         </div>
-        <span className="og-count">{step + 1} / {SYMPTOMS.length}</span>
+        <span className="og-count">{step + 1} / {QUESTIONS.length}</span>
       </div>
 
-      <p className="og-qlead">Колку често во последно време чувствуваш...</p>
-      <h2 className="og-question">{sym.label}</h2>
+      <p className="og-qlead">Колку ти одговара следново...</p>
+      <h2 className="og-question">{q.label}</h2>
 
       <div className="og-scale">
-        {SCALE.map((opt) => (
+        {scale.map((opt) => (
           <button
             key={opt.score}
             className={`og-opt ${current === opt.score ? "on" : ""}`}
@@ -380,7 +489,7 @@ function Quiz({ step, setStep, answers, setAnswers, allAnswered, onFinish }) {
         </button>
         {isLast ? (
           <button className="og-cta slim" disabled={!allAnswered} onClick={onFinish}>
-            Види резултат
+            Следно
           </button>
         ) : (
           <button className="og-ghost" disabled={current === undefined} onClick={() => setStep(step + 1)}>
@@ -392,28 +501,76 @@ function Quiz({ step, setStep, answers, setAnswers, allAnswered, onFinish }) {
   );
 }
 
+function MoodEnergyPicker({ mood, setMood, energy, setEnergy, onDone, onSkip }) {
+  const ready = mood !== null && energy !== null;
+  return (
+    <section className="og-card og-mood">
+      <h2 className="og-title" style={{ fontSize: 24 }}>Уште две прашања...</h2>
+      <p className="og-lead">Необврзувачки — ако сакаш да го прескокнеш, тоа е сосема во ред.</p>
+
+      <div className="og-field">
+        <span className="og-flabel">Расположение во моментов</span>
+        <div className="og-mood-row">
+          {MOOD_OPTIONS.map((o) => (
+            <button
+              key={o.value}
+              className={`og-mood-btn ${mood === o.value ? "on" : ""}`}
+              onClick={() => setMood(o.value)}
+              aria-label={o.label}
+            >
+              <span className="og-mood-emoji">{o.emoji}</span>
+              <span className="og-mood-label">{o.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="og-field">
+        <span className="og-flabel">Ниво на енергија</span>
+        <div className="og-chips">
+          {ENERGY_OPTIONS.map((o) => (
+            <button
+              key={o.value}
+              className={`og-chip ${energy === o.value ? "on" : ""}`}
+              onClick={() => setEnergy(o.value)}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="og-navrow">
+        <button className="og-ghost" onClick={onSkip}>Прескокни</button>
+        <button className="og-cta slim" disabled={!ready} onClick={onDone}>
+          Види резултат
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function DeltaCard({ result, prevCheck }) {
   if (!prevCheck) {
     return (
       <div className="og-delta neutral">
-        Ова е твојата прва проверка. Од следниот пат ќе гледаш како се менуваш од ден на ден.
+        Ова е твојата прва проверка. Од следниот пат ќе гледаш како се менуваш низ времето.
       </div>
     );
   }
-  const diff = result.frequentCount - prevCheck.frequentCount; // пониско = подобро
+  const diff = result.stressScore - (prevCheck.stressScore ?? (prevCheck.frequentCount ?? 0) * 3);
   const when = fmtDate(prevCheck.date);
   if (diff < 0) {
     return (
       <div className="og-delta better">
-        🌤️ Еј, супер - денес носиш помалку отколку на {when}. Што и да правиш, продолжи така.
+        🌤️ Денес носиш помалку стрес отколку на {when}. Добро е — продолжи така.
       </div>
     );
   }
   if (diff > 0) {
     return (
       <div className="og-delta worse">
-        Денес ти е малку потешко отколку на {when}. Потешки денови се случуваат - биди нежен/на со
-        себе. Запиши подолу што се случи, или кажи му на некој на кого му веруваш.
+        Денес ти е малку потешко отколку на {when}. Потешки денови се случуваат — биди нежен/на со себе.
       </div>
     );
   }
@@ -424,36 +581,35 @@ function DeltaCard({ result, prevCheck }) {
   );
 }
 
-function Result({ result, prevCheck, age, gender, onAddJournal, onReset, onHistory }) {
-  const { frequentCount, band, peerPct } = result;
-  const pct = Math.round((frequentCount / SYMPTOMS.length) * 100);
+function Result({ result, prevCheck, ageGroup, exactAge, gender, onAddJournal, onReset, onHistory }) {
+  const { stressScore, pct, band, peerPct } = result;
   const genderLabel = GENDERS.find((g) => g.id === gender)?.label.toLowerCase();
   const youAbove = peerPct !== null && pct > peerPct;
 
   return (
     <section className="og-card og-result">
-      <Gauge value={frequentCount} max={SYMPTOMS.length} color={band.color} aura={band.aura} />
+      <Gauge value={stressScore} max={MAX_SCORE} color={band.color} aura={band.aura} />
 
       <h2 className="og-rtitle" style={{ color: band.color }}>{band.title}</h2>
       <p className="og-rbody">{band.body}</p>
       <p className="og-rmeta">
-        {frequentCount} од {SYMPTOMS.length} симптоми ти се појавуваат почесто од еднаш неделно.
+        Твојот резултат: <strong style={{ color: band.color }}>{pct}%</strong> од максималниот стрес-показател.
       </p>
 
       <DeltaCard result={result} prevCheck={prevCheck} />
 
       {peerPct !== null && (
         <div className="og-compare">
-          <h3 className="og-csub">Како стоиш во споредба со врсници</h3>
+          <h3 className="og-csub">Споредба со врсници (HBSC)</h3>
           <p className="og-cnote">
-            Кај HBSC, околу <strong>{peerPct}%</strong> од младите на {age} год. ({genderLabel})
-            пријавуваат повеќе чести симптоми на стрес.
+            Кај HBSC, околу <strong>{peerPct}%</strong> од младите на {exactAge} год. ({genderLabel})
+            пријавуваат висок стрес.
           </p>
           <CompareBar label="HBSC просек (твоја група)" pct={peerPct} color="#A99BFF" />
           <CompareBar label="Твој резултат" pct={pct} color={band.color} emphasis />
           <p className="og-cverdict">
             {youAbove
-              ? "Во моментов носиш повеќе од просечниот стрес за твојата група - добро е што го забележа."
+              ? "Во моментов носиш повеќе стрес од просекот за твојата група — добро е што го забележа."
               : "Во моментов си околу или под просекот за твојата група."}
           </p>
         </div>
@@ -498,16 +654,32 @@ function History({ checks, journal, onAddJournal, onDeleteJournal, onClearAll, o
         <p className="og-empty">Сè уште нема проверки. Направи една за да почнеш да го следиш напредокот.</p>
       ) : (
         <>
-          <p className="og-cnote">Колку чести симптоми носиш по проверка. <strong>Пониско = подобро.</strong></p>
+          <p className="og-cnote">Твојот стрес-показател по проверка. <strong>Пониско = подобро.</strong></p>
           <Sparkline data={recent} />
           <div className="og-checklist">
-            {checks.slice().reverse().map((c) => (
-              <div className="og-checkrow" key={c.id}>
-                <span className={`og-checkdot band-${c.bandKey}`} />
-                <span className="og-checkdate">{fmtDateTime(c.date)}</span>
-                <span className="og-checkval">{c.frequentCount}/{SYMPTOMS.length} чести</span>
-              </div>
-            ))}
+            {checks.slice().reverse().map((c) => {
+              const score = c.stressScore ?? (c.frequentCount ?? 0) * 3;
+              const pct = Math.round((score / MAX_SCORE) * 100);
+              return (
+                <div className="og-checkrow" key={c.id}>
+                  <span className={`og-checkdot band-${c.bandKey}`} />
+                  <span className="og-checkdate">{fmtDateTime(c.date)}</span>
+                  <span className="og-checkval">
+                    {pct}%
+                    {c.mood != null && (
+                      <span className="og-check-mood" title={MOOD_OPTIONS[c.mood]?.label}>
+                        {" "}{MOOD_OPTIONS[c.mood]?.emoji}
+                      </span>
+                    )}
+                    {c.energy != null && (
+                      <span className="og-check-energy" title={ENERGY_OPTIONS[c.energy]?.label}>
+                        ⚡{ENERGY_OPTIONS[c.energy]?.label}
+                      </span>
+                    )}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </>
       )}
@@ -559,7 +731,7 @@ function History({ checks, journal, onAddJournal, onDeleteJournal, onClearAll, o
   );
 }
 
-function JournalComposer({ title, placeholder, onSave }) {
+function JournalComposer({ title, placeholder, onSave, dark }) {
   const [text, setText] = useState("");
   const [saved, setSaved] = useState(false);
 
@@ -573,9 +745,9 @@ function JournalComposer({ title, placeholder, onSave }) {
 
   return (
     <div className="og-composer">
-      {title && <h3 className="og-csub">{title}</h3>}
+      {title && <h3 className="og-csub" style={dark ? { color: "#fff" } : {}}>{title}</h3>}
       <textarea
-        className="og-textarea"
+        className={`og-textarea${dark ? " dark" : ""}`}
         value={text}
         onChange={(e) => setText(e.target.value)}
         placeholder={placeholder}
@@ -592,15 +764,15 @@ function JournalComposer({ title, placeholder, onSave }) {
 }
 
 function Sparkline({ data }) {
-  const max = SYMPTOMS.length;
   const w = 100, h = 40, pad = 4;
   if (data.length < 2) {
     return <p className="og-cnote" style={{ marginTop: -4 }}>Потребни се барем две проверки за линија на трендот.</p>;
   }
   const stepX = (w - pad * 2) / (data.length - 1);
   const pts = data.map((d, i) => {
+    const score = d.stressScore ?? (d.frequentCount ?? 0) * 3;
     const x = pad + i * stepX;
-    const y = pad + (d.frequentCount / max) * (h - pad * 2);
+    const y = pad + (score / MAX_SCORE) * (h - pad * 2);
     return [x, y];
   });
   const line = pts.map((p) => p.join(",")).join(" ");
@@ -650,6 +822,119 @@ function CompareBar({ label, pct, color, emphasis }) {
       <div className="og-bar-track">
         <div className="og-bar-fill" style={{ width: `${Math.min(pct, 100)}%`, background: color }} />
       </div>
+    </div>
+  );
+}
+
+function BreatheOverlay({ onClose, reduceMotion }) {
+  const [round, setRound] = useState(1);
+  const [phaseIdx, setPhaseIdx] = useState(0);
+  const [done, setDone] = useState(false);
+  const [tick, setTick] = useState(0);
+  const [active, setActive] = useState(false);
+  const phase = BREATHE_PHASES[phaseIdx];
+
+  // delay first animation so the browser paints scale(1) before growing
+  useEffect(() => {
+    const id = setTimeout(() => setActive(true), 50);
+    return () => clearTimeout(id);
+  }, []);
+
+  // phase timer
+  useEffect(() => {
+    if (done) return;
+    const timer = setTimeout(() => {
+      const nextPhase = (phaseIdx + 1) % BREATHE_PHASES.length;
+      if (nextPhase === 0) {
+        if (round >= BREATHE_ROUNDS) { setDone(true); return; }
+        setRound((r) => r + 1);
+      }
+      setPhaseIdx(nextPhase);
+    }, phase.duration);
+    return () => clearTimeout(timer);
+  }, [phaseIdx, round, done, phase.duration]);
+
+  // per-second tick, resets on each phase change
+  useEffect(() => {
+    setTick(0);
+    if (done) return;
+    const interval = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(interval);
+  }, [phaseIdx, done]);
+
+  const totalSecs = phase.duration / 1000;
+  const displayCount = phase.count === "up"
+    ? Math.min(tick + 1, totalSecs)
+    : Math.max(totalSecs - tick, 1);
+
+  const circleStyle = reduceMotion
+    ? {}
+    : active
+      ? { transform: `scale(${phase.scale})`, transition: `transform ${phase.duration}ms ease-in-out` }
+      : { transform: "scale(1)", transition: "none" };
+
+  return (
+    <div className="og-overlay" role="dialog" aria-modal="true" aria-label="Вежба за дишење">
+      <button className="og-overlay-close" onClick={onClose} aria-label="Затвори">✕</button>
+      {done ? (
+        <div className="og-breathe-done">
+          <p className="og-breathe-msg">Убаво направено 🌿</p>
+          <p className="og-breathe-sub">4 рунди завршени. Земи момент да почувствуваш разлика.</p>
+          <button className="og-cta slim" onClick={onClose} style={{ marginTop: 24 }}>Затвори</button>
+        </div>
+      ) : (
+        <>
+          <p className="og-breathe-round">Рунда {round} / {BREATHE_ROUNDS}</p>
+          <div className="og-breathe-ring">
+            <div className="og-breathe-circle" style={circleStyle} />
+          </div>
+          <p className="og-breathe-phase">{phase.label}</p>
+          <p className="og-breathe-count">{displayCount}с</p>
+          {reduceMotion && <p className="og-breathe-sub">Вдиши 4с · Задржи 7с · Издиши 8с</p>}
+        </>
+      )}
+    </div>
+  );
+}
+
+function JournalOverlay({ journal, onAddJournal, onDeleteJournal, onClose }) {
+  return (
+    <div className="og-overlay og-journal-overlay" role="dialog" aria-modal="true" aria-label="Дневник">
+      <button className="og-overlay-close" onClick={onClose} aria-label="Затвори">✕</button>
+      <div className="og-journal-inner">
+        <h2 className="og-htitle" style={{ color: "#fff", marginBottom: 20 }}>Дневник</h2>
+        <JournalComposer title="" placeholder="Нов запис — пиши слободно..." onSave={onAddJournal} dark />
+        {journal.length === 0 ? (
+          <p className="og-empty" style={{ color: "rgba(255,255,255,.5)", marginTop: 16 }}>
+            Нема записи сè уште.
+          </p>
+        ) : (
+          <div className="og-jlist" style={{ marginTop: 16 }}>
+            {journal.map((j) => (
+              <div className="og-jentry og-jentry-dark" key={j.id}>
+                <div className="og-jtop">
+                  <span className="og-jdate">{fmtDateTime(j.date)}</span>
+                  <button className="og-jdel" onClick={() => onDeleteJournal(j.id)} aria-label="Избриши запис">✕</button>
+                </div>
+                <p className="og-jtext">{j.text}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FloatingButtons({ onBreathe, onJournal }) {
+  return (
+    <div className="og-fab-group" aria-label="Брзи алатки">
+      <button className="og-fab" onClick={onBreathe} aria-label="Вежба за дишење" title="Вежба за дишење">
+        <span className="og-fab-icon">🫁</span>
+      </button>
+      <button className="og-fab" onClick={onJournal} aria-label="Дневник" title="Дневник">
+        <span className="og-fab-icon">✏️</span>
+      </button>
     </div>
   );
 }
@@ -786,6 +1071,8 @@ const css = `
 .og-checkdot{width:11px; height:11px; border-radius:50%; flex-shrink:0;}
 .og-checkdate{color:var(--ink); font-weight:500;}
 .og-checkval{margin-left:auto; color:var(--muted); font-family:'Quicksand',sans-serif; font-weight:600; font-size:13px;}
+.og-check-mood{font-size:15px;}
+.og-check-energy{font-size:12px; color:var(--muted); margin-left:4px; font-family:'Quicksand',sans-serif; font-weight:600;}
 
 .og-jsection{margin-top:26px; padding-top:24px; border-top:1px solid var(--line);}
 .og-jlist{display:flex; flex-direction:column; gap:12px; margin-top:18px;}
@@ -803,6 +1090,26 @@ const css = `
 
 .og-foot{margin-top:22px; text-align:center; font-size:12.5px; color:var(--muted); line-height:1.6; padding:0 8px;}
 *:focus-visible{outline:3px solid rgba(123,108,246,.5); outline-offset:2px; border-radius:8px;}
+
+.og-mood-row{display:flex; gap:8px; flex-wrap:wrap;}
+.og-mood-btn{display:flex; flex-direction:column; align-items:center; gap:4px; background:rgba(255,255,255,.55); border:1.5px solid var(--line); border-radius:16px; padding:12px 10px; cursor:pointer; transition:.16s; flex:1; min-width:52px;}
+.og-mood-btn:hover{border-color:var(--violet-soft);}
+.og-mood-btn.on{border-color:var(--violet); background:rgba(123,108,246,.10);}
+.og-mood-emoji{font-size:26px; line-height:1;}
+.og-mood-label{font-size:11px; font-weight:600; color:var(--muted); font-family:'Quicksand',sans-serif; text-align:center;}
+
+.og-overlay{position:fixed; inset:0; z-index:100; background:rgba(20,18,40,.88); backdrop-filter:blur(8px); display:flex; flex-direction:column; align-items:center; justify-content:center; padding:32px;}
+.og-overlay-close{position:absolute; top:20px; right:20px; background:rgba(255,255,255,.12); border:none; color:#fff; font-size:18px; width:38px; height:38px; border-radius:50%; cursor:pointer; transition:.15s; display:flex; align-items:center; justify-content:center;}
+.og-overlay-close:hover{background:rgba(255,255,255,.22);}
+.og-breathe-round{color:rgba(255,255,255,.5); font-size:13px; font-family:'Quicksand',sans-serif; margin:0 0 32px;}
+.og-breathe-ring{width:180px; height:180px; border-radius:50%; border:2px solid rgba(255,255,255,.15); display:flex; align-items:center; justify-content:center; margin-bottom:32px;}
+.og-breathe-circle{width:100px; height:100px; border-radius:50%; background:radial-gradient(circle, #a99bff 0%, #7b6cf6 60%, #5b4dd6 100%); box-shadow:0 0 40px rgba(123,108,246,.5);}
+.og-breathe-phase{color:#fff; font-family:'Quicksand',sans-serif; font-weight:700; font-size:28px; margin:0 0 8px;}
+.og-breathe-count{color:rgba(255,255,255,.45); font-size:14px; margin:0;}
+.og-breathe-done{text-align:center; color:#fff;}
+.og-breathe-msg{font-family:'Quicksand',sans-serif; font-weight:700; font-size:28px; margin:0 0 12px;}
+.og-breathe-sub{color:rgba(255,255,255,.6); font-size:15px; line-height:1.5; margin:8px 0 0;}
+
 @media (max-width:480px){
   .og-title{font-size:26px;} .og-question{font-size:23px;}
   .og-card{padding:24px 18px; border-radius:24px;}
@@ -810,4 +1117,20 @@ const css = `
   .og-navrow.tight{flex-direction:row; align-items:center;}
   .og-cta.slim{width:100%;}
 }
+
+.og-journal-overlay{overflow-y:auto; justify-content:flex-start; padding-top:60px;}
+.og-journal-inner{width:100%; max-width:560px;}
+.og-jentry-dark{background:rgba(255,255,255,.08); border-color:rgba(255,255,255,.12);}
+.og-jentry-dark .og-jdate{color:rgba(255,255,255,.45);}
+.og-jentry-dark .og-jtext{color:rgba(255,255,255,.9);}
+.og-jentry-dark .og-jdel{color:rgba(255,255,255,.4);}
+.og-jentry-dark .og-jdel:hover{color:#ff8a6b; background:rgba(255,138,107,.15);}
+.og-textarea.dark{background:rgba(255,255,255,.1); border-color:rgba(255,255,255,.2); color:#fff;}
+.og-textarea.dark::placeholder{color:rgba(255,255,255,.35);}
+.og-textarea.dark:focus{border-color:var(--violet-soft);}
+.og-fab-group{position:fixed; bottom:24px; right:20px; z-index:50; display:flex; flex-direction:column; gap:12px; align-items:center;}
+.og-fab{width:52px; height:52px; border-radius:50%; border:none; background:rgba(255,255,255,.9); box-shadow:0 4px 16px rgba(43,40,64,.25); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:.16s; backdrop-filter:blur(8px);}
+.og-fab:hover{box-shadow:0 6px 20px rgba(43,40,64,.3);}
+@media (prefers-reduced-motion: no-preference){.og-fab:hover{transform:scale(1.08);}}
+.og-fab-icon{font-size:22px; line-height:1;}
 `;
